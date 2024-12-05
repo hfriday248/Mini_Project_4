@@ -23,6 +23,8 @@ This project is a custom shell implementation for Unix-based systems. It support
    cd Mini_Project_4
 
 3. Compile the project
+   gcc -std=c99 -D_POSIX_C_SOURCE=200809L -o hannah hannah.c
+
 
 ## Usage
 1. Start the shell by running
