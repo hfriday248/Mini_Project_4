@@ -4,29 +4,36 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <signal.h>
 
 // Define constants
-
 #define MAX_INPUT 1024
 #define MAX_ARGS 100
 #define ERROR_MESSAGE "The error occurred\n"
 
 // Globals
-
 char *path[MAX_ARGS] = {"/bin", NULL};
 
 // Function prototypes
-
 void execute_command(char **args);
 int is_builtin_command(char **args);
 void run_builtin_command(char **args);
 void redirect_output(char **args);
 void parse_input(char *line, char **args);
+int has_pipe(char **args);
+void execute_command_with_pipe(char **args);
+void execute_background_process(char **args);
+void sigint_handler(int sig);
+
+// Main function
 int main(int argc, char *argv[]) {
     FILE *input = stdin;  // Default to interactive mode
     char *line = NULL;
     size_t len = 0;
     ssize_t nread;
+
+    // Set up signal handler for SIGINT
+    signal(SIGINT, sigint_handler);
 
     // Check command-line arguments
     if (argc > 2) {
@@ -44,10 +51,10 @@ int main(int argc, char *argv[]) {
     while (1) {
         if (input == stdin) {
             printf("hannah> ");
-    }
+        }
     
-    // Read input
-    nread = getline(&line, &len, input);
+        // Read input
+        nread = getline(&line, &len, input);
         if (nread == -1) {  // EOF
             free(line);
             exit(0);
@@ -61,12 +68,16 @@ int main(int argc, char *argv[]) {
         if (args[0] == NULL) {
             continue;
         }
-  
+
         // Check for built-in commands
         if (is_builtin_command(args)) {
             run_builtin_command(args);
+        } else if (has_pipe(args)) {
+            execute_command_with_pipe(args);  // Handle pipes
+        } else if (strcmp(args[0], "&") == 0) {
+            execute_background_process(args);  // Handle background processes
         } else {
-            execute_command(args);
+            execute_command(args);  // Execute normal commands
         }
     }
     fclose(input);
@@ -83,6 +94,69 @@ void parse_input(char *line, char **args) {
         token = strtok(NULL, " \t\n");
     }
     args[index] = NULL;
+}
+
+// Check if command contains a pipe
+int has_pipe(char **args) {
+    for (int i = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], "|") == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Execute command with pipe
+void execute_command_with_pipe(char **args) {
+    int pipefd[2];
+    pid_t pid1, pid2;
+
+    if (pipe(pipefd) < 0) {
+        perror("pipe");
+        exit(1);
+    }
+
+    pid1 = fork();
+    if (pid1 == 0) {
+        // Child process 1
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[0]);
+        execvp(args[0], args);
+        perror("execvp");
+        exit(1);
+    }
+
+    pid2 = fork();
+    if (pid2 == 0) {
+        // Child process 2
+        dup2(pipefd[0], STDIN_FILENO);
+        close(pipefd[1]);
+        execvp(args[2], &args[2]);
+        perror("execvp");
+        exit(1);
+    }
+
+    close(pipefd[0]);
+    close(pipefd[1]);
+    wait(NULL);
+    wait(NULL);
+}
+
+// Execute background processes
+void execute_background_process(char **args) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process
+        setpgid(0, 0);  // Create a new process group for background processes
+        execvp(args[0], args);
+        perror("execvp");
+        exit(1);
+    }
+}
+
+// Handle SIGINT signal (Ctrl+C)
+void sigint_handler(int sig) {
+    write(STDOUT_FILENO, "\nInterrupt signal received, shell is ready for new command.\n", 65);
 }
 
 // Execute non-built-in commands
@@ -140,14 +214,6 @@ void run_builtin_command(char **args) {
             }
         }
     }
-}
-
-// Handle built-in commands
-int is_builtin_command(char **args) {
-    return strcmp(args[0], "exit") == 0 ||
-           strcmp(args[0], "cd") == 0 ||
-           strcmp(args[0], "path") == 0 ||
-           strcmp(args[0], "loop") == 0;
 }
 
 // Handle output redirection
