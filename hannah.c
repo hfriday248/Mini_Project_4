@@ -4,23 +4,25 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <fcntl.h>
-#include <signal.h>
+
+// Define constants
 
 #define MAX_INPUT 1024
 #define MAX_ARGS 100
 #define ERROR_MESSAGE "The error occurred\n"
 
+// Globals
+
 char *path[MAX_ARGS] = {"/bin", NULL};
+
+// Function prototypes
 
 void execute_command(char **args, int background);
 int is_builtin_command(char **args);
 void run_builtin_command(char **args);
 void redirect_output(char **args);
 void parse_input(char *line, char **args);
-void update_prompt();
-void handle_signals(int sig);
-
-char current_directory[MAX_INPUT] = ""; // To hold the current directory path
+void handle_background_process(char **args);
 
 int main(int argc, char *argv[]) {
     FILE *input = stdin;  // Default to interactive mode
@@ -28,9 +30,7 @@ int main(int argc, char *argv[]) {
     size_t len = 0;
     ssize_t nread;
 
-    // Set up signal handler for Ctrl+C (SIGINT)
-    signal(SIGINT, handle_signals);
-
+    // Check command-line arguments
     if (argc > 2) {
         fprintf(stderr, ERROR_MESSAGE);
         exit(1);
@@ -45,10 +45,10 @@ int main(int argc, char *argv[]) {
     // Shell loop
     while (1) {
         if (input == stdin) {
-            update_prompt(); // Update prompt with current directory
-            printf("%s> ", current_directory); // Display the current directory as part of the prompt
+            printf("hannah> ");
         }
         
+        // Read input
         nread = getline(&line, &len, input);
         if (nread == -1) {  // EOF
             free(line);
@@ -64,30 +64,23 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        // Handle background process (if exists)
+        int background = 0;
+        if (strcmp(args[MAX_ARGS - 1], "&") == 0) {
+            background = 1;
+            args[MAX_ARGS - 1] = NULL;  // Remove '&' from arguments
+        }
+
         // Check for built-in commands
         if (is_builtin_command(args)) {
             run_builtin_command(args);
         } else {
-            int background = 0;
-            // Check if the command should run in the background
-            if (args[0] != NULL && strcmp(args[MAX_ARGS-2], "&") == 0) {
-                args[MAX_ARGS-2] = NULL; // Remove "&" from args
-                background = 1;
-            }
             execute_command(args, background);
         }
     }
     fclose(input);
     free(line);
     return 0;
-}
-
-// Update the current directory and the prompt
-void update_prompt() {
-    if (getcwd(current_directory, sizeof(current_directory)) == NULL) {
-        fprintf(stderr, ERROR_MESSAGE);
-        exit(1);
-    }
 }
 
 // Parse input line into arguments
@@ -113,6 +106,8 @@ void execute_command(char **args, int background) {
         pid_t pid2;
         char *cmd1[MAX_ARGS], *cmd2[MAX_ARGS];
         int pipe_index = -1;
+        
+        // Search for the pipe symbol in the command
         for (int i = 0; args[i] != NULL; i++) {
             if (strcmp(args[i], "|") == 0) {
                 pipe_index = i;
@@ -121,12 +116,20 @@ void execute_command(char **args, int background) {
         }
 
         if (pipe_index != -1) {
-            args[pipe_index] = NULL; // Split the command at "|"
+            args[pipe_index] = NULL;  // Split command at pipe
+            
+            // Set up the first command before the pipe
             for (int i = 0; i < pipe_index; i++) cmd1[i] = args[i];
+            cmd1[pipe_index] = NULL;
+
+            // Set up the second command after the pipe
             for (int i = pipe_index + 1; args[i] != NULL; i++) cmd2[i - pipe_index - 1] = args[i];
+            cmd2[pipe_index] = NULL;
 
-            pipe(pipefd);  // Create pipe
+            // Create the pipe
+            pipe(pipefd);
 
+            // Fork to handle first command
             pid2 = fork();
             if (pid2 == 0) {
                 // Second child for the second command
@@ -147,6 +150,7 @@ void execute_command(char **args, int background) {
                 exit(1);
             }
         } else {
+            // No pipe, regular execution
             for (int i = 0; path[i] != NULL; i++) {
                 char command[MAX_INPUT];
                 snprintf(command, sizeof(command), "%s/%s", path[i], args[0]);
@@ -158,7 +162,7 @@ void execute_command(char **args, int background) {
     } else if (pid > 0) {
         // Parent process
         if (!background) {
-            wait(NULL);
+            wait(NULL);  // Wait for child process to finish
         }
     } else {
         // Fork failed
@@ -177,21 +181,12 @@ void run_builtin_command(char **args) {
     } else if (strcmp(args[0], "cd") == 0) {
         if (args[1] == NULL || args[2] != NULL || chdir(args[1]) != 0) {
             fprintf(stderr, ERROR_MESSAGE);
-        } else {
-            update_prompt(); // Update the prompt after changing the directory
         }
     } else if (strcmp(args[0], "path") == 0) {
         for (int i = 1; i < MAX_ARGS && args[i] != NULL; i++) {
             path[i - 1] = args[i];
         }
         path[MAX_ARGS - 1] = NULL;
-    }
-}
-
-// Handle background processes
-void handle_signals(int sig) {
-    if (sig == SIGINT) {
-        // Do nothing on SIGINT to avoid killing the shell (Ctrl+C)
     }
 }
 
@@ -223,7 +218,6 @@ int is_builtin_command(char **args) {
            strcmp(args[0], "cd") == 0 ||
            strcmp(args[0], "path") == 0;
 }
-
 
 // Handle output redirection
 void redirect_output(char **args) {
