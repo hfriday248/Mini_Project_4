@@ -17,6 +17,7 @@ int is_builtin_command(char **args);
 void run_builtin_command(char **args);
 void redirect_output(char **args);
 void handle_pipes(char **args, int background);
+int is_background_command(char **args);
 
 int main(int argc, char *argv[]) {
     FILE *input = stdin;
@@ -53,14 +54,7 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        int background = 0;
-        for (int i = 0; args[i] != NULL; i++) {
-            if (strcmp(args[i], "&") == 0) {
-                background = 1;
-                args[i] = NULL;
-                break;
-            }
-        }
+        int background = is_background_command(args);
 
         if (is_builtin_command(args)) {
             run_builtin_command(args);
@@ -131,6 +125,16 @@ void handle_pipes(char **args, int background) {
             i++;
         }
     }
+}
+
+int is_background_command(char **args) {
+    for (int i = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], "&") == 0) {
+            args[i] = NULL; // Remove "&" from args
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int is_builtin_command(char **args) {
