@@ -16,6 +16,7 @@ void execute_command(char **args, int background);
 int is_builtin_command(char **args);
 void run_builtin_command(char **args);
 void redirect_output(char **args);
+void handle_pipes(char **args, int background);
 
 int main(int argc, char *argv[]) {
     FILE *input = stdin;
@@ -88,33 +89,7 @@ void execute_command(char **args, int background) {
 
     if (pid == 0) {
         redirect_output(args);
-
-        for (int i = 0; args[i] != NULL; i++) {
-            if (strcmp(args[i], "|") == 0) {
-                int pipefd[2];
-                pipe(pipefd);
-
-                pid_t pid2 = fork();
-                if (pid2 == 0) {
-                    close(pipefd[0]);
-                    dup2(pipefd[1], STDOUT_FILENO);
-                    args[i] = NULL;
-                    execvp(args[0], args);
-                    perror(ERROR_MESSAGE);
-                    exit(1);
-                } else if (pid2 > 0) {
-                    close(pipefd[1]);
-                    dup2(pipefd[0], STDIN_FILENO);
-                    execvp(args[i + 1], &args[i + 1]);
-                    perror(ERROR_MESSAGE);
-                    exit(1);
-                } else {
-                    perror(ERROR_MESSAGE);
-                    exit(1);
-                }
-            }
-        }
-
+        handle_pipes(args, background);
         execvp(args[0], args);
         perror(ERROR_MESSAGE);
         exit(1);
@@ -124,6 +99,37 @@ void execute_command(char **args, int background) {
         }
     } else {
         perror(ERROR_MESSAGE);
+    }
+}
+
+void handle_pipes(char **args, int background) {
+    int pipefds[2 * MAX_ARGS];  // To hold multiple pipe file descriptors
+    int i = 0;
+    int j = 0;
+
+    while (args[i] != NULL) {
+        if (strcmp(args[i], "|") == 0) {
+            pipe(pipefds + j);
+            pid_t pid = fork();
+            if (pid == 0) {
+                dup2(pipefds[j + 1], STDOUT_FILENO);  // Write to the pipe
+                close(pipefds[j]);
+                close(pipefds[j + 1]);
+                args[i] = NULL;  // End the current command at the pipe
+                execvp(args[0], args);
+                perror(ERROR_MESSAGE);
+                exit(1);
+            } else {
+                wait(NULL);
+                dup2(pipefds[j], STDIN_FILENO);  // Read from the previous pipe
+                close(pipefds[j]);
+                close(pipefds[j + 1]);
+                i++;
+                j += 2;  // Move to the next pipe pair
+            }
+        } else {
+            i++;
+        }
     }
 }
 
