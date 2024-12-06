@@ -1,26 +1,27 @@
 # Mini_Project_4
 
-# Unix Shell Project: Custom Shell Implementation
+## Unix Shell Project: Custom Shell Implementation
 
-## Project Description
-This project implements a custom Unix shell designed to provide a simplified interface for interacting with the operating system. The shell supports executing basic commands, redirecting input/output, piping commands, and managing background processes. Built-in commands include cd, exit, and path, enabling users to navigate directories, terminate the shell, and modify the executable search path. The project also includes basic error handling for invalid commands and syntax.
+### Project Description
+This project implements a custom Unix shell designed to provide a simplified interface for interacting with the operating system. The shell supports executing basic commands, redirecting input/output, piping commands, and managing background processes. It includes essential built-in commands like `cd`, `exit`, and `path`, allowing users to navigate directories, terminate the shell session, and modify the executable search path. This project also demonstrates basic error handling for invalid commands and improper syntax.
 
-## Features
-- Command Execution: Supports basic Unix commands (e.g., ls, pwd, echo).
-- Built-in Commands:
- - cd: Change the current working directory.
- - exit: Terminate the shell session.
- - path: Modify executable search paths.
-- Redirection: Handle output redirection using > or >>.
-- Piping: Enable data flow between commands using |.
-- Background Processes: Run commands asynchronously using &.
-- Interactive and Batch Modes:
- - Interactive mode: Accept commands directly from the user.
- - Batch mode: Read and execute commands from a script file.
-- Error Handling: Display error messages for invalid commands and improper syntax.
+### Features
+- **Command Execution**: Supports basic Unix commands (e.g., `ls`, `pwd`, `echo`).
+- **Built-in Commands**:
+  - `cd`: Change the current working directory.
+  - `exit`: Terminate the shell session.
+  - `path`: Modify executable search paths.
+- **Redirection**: Handle output redirection using `>` or `>>`.
+- **Piping**: Enable data flow between commands using `|`.
+- **Background Processes**: Run commands asynchronously using `&`.
+- **Looping**: Supports infinite loops and conditional loops for repeated command execution.
+- **Interactive Mode**: Accept commands directly from the user.
+- **Batch Mode**: Read and execute commands from a script file.
+- **Error Handling**: Displays error messages for invalid commands and improper syntax.
 
-## Installation
+### Installation
 1. Clone this repository:
+   ```bash
    git clone https://github.com/hfriday248/Mini_Project_4.git
  
 2. Navigate to the project directory
