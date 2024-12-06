@@ -97,35 +97,65 @@ void execute_command(char **args, int background) {
 }
 
 void handle_pipes(char **args, int background) {
-    int pipefds[2 * MAX_ARGS];  // To hold multiple pipe file descriptors
-    int i = 0;
-    int j = 0;
-
-    while (args[i] != NULL) {
+    int pipe_count = 0;
+    for (int i = 0; args[i] != NULL; i++) {
         if (strcmp(args[i], "|") == 0) {
-            pipe(pipefds + j);
-            pid_t pid = fork();
-            if (pid == 0) {
-                dup2(pipefds[j + 1], STDOUT_FILENO);  // Write to the pipe
-                close(pipefds[j]);
-                close(pipefds[j + 1]);
-                args[i] = NULL;  // End the current command at the pipe
-                execvp(args[0], args);
-                perror(ERROR_MESSAGE);
-                exit(1);
-            } else {
-                wait(NULL);
-                dup2(pipefds[j], STDIN_FILENO);  // Read from the previous pipe
-                close(pipefds[j]);
-                close(pipefds[j + 1]);
-                i++;
-                j += 2;  // Move to the next pipe pair
-            }
-        } else {
-            i++;
+            pipe_count++;
         }
     }
+
+    if (pipe_count == 0) {
+        // No pipes, execute normally
+        execvp(args[0], args);
+        perror(ERROR_MESSAGE);
+        exit(1);
+    }
+
+    int pipefds[2 * pipe_count]; // Create enough pipe file descriptors
+    for (int i = 0; i < pipe_count; i++) {
+        if (pipe(pipefds + i * 2) < 0) {
+            perror(ERROR_MESSAGE);
+            exit(1);
+        }
+    }
+
+    int command_start = 0;
+    for (int i = 0, j = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], "|") == 0 || args[i + 1] == NULL) {
+            args[i] = NULL; // Break command at pipe
+            pid_t pid = fork();
+            if (pid == 0) {
+                if (j > 0) {
+                    // Redirect input from previous pipe
+                    dup2(pipefds[(j - 1) * 2], STDIN_FILENO);
+                }
+                if (args[i + 1] != NULL) {
+                    // Redirect output to next pipe
+                    dup2(pipefds[j * 2 + 1], STDOUT_FILENO);
+                }
+                for (int k = 0; k < 2 * pipe_count; k++) {
+                    close(pipefds[k]);
+                }
+                execvp(args[command_start], args + command_start);
+                perror(ERROR_MESSAGE);
+                exit(1);
+            } else if (pid < 0) {
+                perror(ERROR_MESSAGE);
+                exit(1);
+            }
+            command_start = i + 1; // Move to the next command
+            j++;
+        }
+    }
+
+    for (int i = 0; i < 2 * pipe_count; i++) {
+        close(pipefds[i]);
+    }
+    for (int i = 0; i <= pipe_count; i++) {
+        wait(NULL); // Wait for all child processes
+    }
 }
+
 
 int is_background_command(char **args) {
     for (int i = 0; args[i] != NULL; i++) {
