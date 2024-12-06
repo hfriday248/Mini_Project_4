@@ -19,6 +19,7 @@ void redirect_output(char **args);
 void handle_pipes(char **args, int background);
 int is_background_command(char **args);
 int execute_from_path(char **args);
+void run_loop_command(char **args);
 
 void loop(FILE *input);
 
@@ -70,6 +71,8 @@ void loop(FILE *input) {
 
         if (is_builtin_command(args)) {
             run_builtin_command(args);
+        } else if (strcmp(args[0], "loop") == 0) {
+            run_loop_command(args);  // Handle 'loop' command separately
         } else {
             execute_command(args, background);
         }
@@ -243,6 +246,45 @@ void redirect_output(char **args) {
             close(fd);
             args[i] = NULL;
             break;
+        }
+    }
+}
+
+void run_loop_command(char **args) {
+    if (args[1] == NULL || args[2] == NULL) {
+        fprintf(stderr, ERROR_MESSAGE);
+        return;
+    }
+
+    // Convert the loop count to an integer
+    char *endptr;
+    int count = strtol(args[1], &endptr, 10);
+    if (*endptr != '\0' || count <= 0) {
+        fprintf(stderr, ERROR_MESSAGE);
+        return;
+    }
+
+    // Loop and execute the command
+    char *command[MAX_ARGS];
+    int i = 2;
+    while (args[i] != NULL) {
+        command[i - 2] = args[i];
+        i++;
+    }
+    command[i - 2] = NULL;
+
+    for (int j = 0; j < count; j++) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            if (!execute_from_path(command)) {
+                fprintf(stderr, ERROR_MESSAGE);
+                exit(1);
+            }
+        } else if (pid < 0) {
+            fprintf(stderr, ERROR_MESSAGE);
+            return;
+        } else {
+            wait(NULL);
         }
     }
 }
